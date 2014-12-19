@@ -40,7 +40,7 @@ class IndividualCompany
       
       match_data = /.*原因[^\d]*,(.*)/.match(line)
       if match_data
-        @reason = match_data[1]
+        @reason = match_data[1].gsub(/\"/, '')
         next
       end
     end
@@ -59,6 +59,9 @@ class ContentParser
   
   def create_excel_report()
     begin
+    	if File.exist?('c:\temp\test_old.xlsx')
+    	  File.delete('c:\temp\test_old.xlsx')
+    	end
       if File.exist?('c:\temp\test.xlsx')
         File.rename('c:\temp\test.xlsx', 'c:\temp\test_old.xlsx')
       end
@@ -71,7 +74,7 @@ class ContentParser
       
       worksheet.Range("A1:E1").Font.Bold = true
       worksheet.Range("A1:E1").Font.Size = 11
-      worksheet.Range("A1:E1").Interior.ColorIndex = 53
+      worksheet.Range("A1:E1").Interior.ColorIndex = 37
       worksheet.Range("A1")['Value'] = "RIC(Company Name)"
       worksheet.Range("B1")['Value'] = "Headline"
       worksheet.Range("C1")['Value'] = "Body"
@@ -117,6 +120,6 @@ puts company.change_from
 puts company.change_to
 puts company.reason
 
-#content_parser = ContentParser.new()
-#content_parser.add_report("TR", content)
-#content_parser.create_excel_report()
+content_parser = ContentParser.new()
+content_parser.add_report("TR", content)
+content_parser.create_excel_report()
