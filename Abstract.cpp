@@ -15,6 +15,7 @@ int GBK2UTF8(const char *szGbk, char *szUtf8);
 int UTF82GBK(const char *szUtf8, char *szGbk);
 int GetGroupId(vector <int>& group, const int wid, int& groupNum);
 int MergeGroup(vector <int>& group, const int fromId, const int toId, int& headGroup);
+int FindNextSubSentenceStart(string& line, const int startPos);
 
 int main(int argc, char* argv[])
 {
@@ -23,7 +24,7 @@ int main(int argc, char* argv[])
 		cout << "Abstract.exe <ModelPath> <InputFile> <OutputFile>" << endl;
 		return -1;
 	}
-
+	
 	char segModel[256] = {0};
 	char posModel[256] = {0};
 	char psrModel[256] = {0};
@@ -75,76 +76,98 @@ int main(int argc, char* argv[])
 	{
 		if(line.length() > 0)
 		{
-			words.clear();
-			tags.clear();
-			heads.clear();
-			deprels.clear();
-			GBK2UTF8(line.c_str(), str);
-			const int len = segmentor_segment(segEngine, str, words);
-			postagger_postag(posEngine, words, tags);
-			parser_parse(parseEngine, words, tags, heads, deprels);
-
-			for(size_t i = 0; i < heads.size(); ++i)
+			int startPos = 0;
+			bool bExit = false;
+			string result = "";
+			while(!bExit)
 			{
-				UTF82GBK(words[i].c_str(), str);
-				std::cout << (i+1) << "\t" << str << "\t" << tags[i] << "\t" 
-					<< heads[i] << "\t" << deprels[i] << std::endl;
-			}
-
-			int groupNum = 0;
-			int headGroup = 0;
-			group.clear();
-			for(int i = 0; i < len; ++i)
-			{
-				group.push_back(0);
-			}
-
-			for(int i = 0; i < len; ++i)
-			{
-				if("HED" == deprels[i])
+				int pos = FindNextSubSentenceStart(line, startPos);
+				string sentence = "";
+				if(-1 == pos)
 				{
-					headGroup = GetGroupId(group, i, groupNum);
+					sentence = line.substr(startPos);
+					bExit = true;
 				}
-				else if(deprels[i] == "VOB" || deprels[i] == "WP" || deprels[i] == "COO" || deprels[i] == "SBV" ||
-					deprels[i] == "LAD" || deprels[i] == "RAD" || deprels[i] == "FOB" ||
-					(deprels[i] == "ATT" && (tags[i] == "v" || tags[i] == "m" || tags[i] == "n")) ||
-					(deprels[i] == "ADV" && (tags[i] == "c" || tags[i] == "m")))
+				else
 				{
-					if(group[i] > 0)
+					sentence = line.substr(startPos, pos - startPos);
+					startPos = pos;
+				}
+
+				// xxxx的原因:
+				if(-1 != sentence.find("原因") && (-1 != sentence.find("：") || -1 != sentence.find(":"))) continue;
+
+				words.clear();
+				tags.clear();
+				heads.clear();
+				deprels.clear();
+				GBK2UTF8(sentence.c_str(), str);
+				const int len = segmentor_segment(segEngine, str, words);
+				postagger_postag(posEngine, words, tags);
+				parser_parse(parseEngine, words, tags, heads, deprels);
+
+				for(size_t i = 0; i < heads.size(); ++i)
+				{
+					UTF82GBK(words[i].c_str(), str);
+					std::cout << (i+1) << "\t" << str << "\t" << tags[i] << "\t" 
+						<< heads[i] << "\t" << deprels[i] << std::endl;
+				}
+
+				int groupNum = 0;
+				int headGroup = 0;
+				group.clear();
+				for(int i = 0; i < len; ++i)
+				{
+					group.push_back(0);
+				}
+
+				for(int i = 0; i < len; ++i)
+				{
+					if("HED" == deprels[i])
 					{
-						if(group[heads[i] - 1] > 0)
+						headGroup = GetGroupId(group, i, groupNum);
+					}
+					else if(deprels[i] == "VOB" || deprels[i] == "WP" || deprels[i] == "COO" || deprels[i] == "SBV" ||
+						deprels[i] == "LAD" || deprels[i] == "RAD" || deprels[i] == "FOB" || deprels[i] == "POB" ||
+						(deprels[i] == "ATT" && (tags[i] == "v" || tags[i] == "m" || tags[i] == "n")) ||
+						(deprels[i] == "ADV" && (tags[i] == "c" || tags[i] == "m" || tags[i] == "a" || tags[i] == "p")))
+					{
+						if(group[i] > 0)
 						{
-							if(group[i] != group[heads[i] - 1])
+							if(group[heads[i] - 1] > 0)
 							{
-								MergeGroup(group, group[i], group[heads[i] - 1], headGroup);
+								if(group[i] != group[heads[i] - 1])
+								{
+									MergeGroup(group, group[i], group[heads[i] - 1], headGroup);
+								}
+							}
+							else
+							{
+								group[heads[i] - 1] = group[i];
 							}
 						}
 						else
 						{
-							group[heads[i] - 1] = group[i];
+							group[i] = GetGroupId(group, heads[i] - 1, groupNum);
 						}
 					}
-					else
+				}
+
+				if(headGroup > 0)
+				{
+					for(int i = 0; i < len; ++i)
 					{
-						group[i] = GetGroupId(group, heads[i] - 1, groupNum);
+						if(headGroup == group[i])
+						{
+							UTF82GBK(words[i].c_str(), str);
+							result += str;
+						}
 					}
 				}
 			}
 
 			cout << "转换前：" << line << endl;
-			cout << "转换后：";
-			if(headGroup > 0)
-			{
-				for(int i = 0; i < len; ++i)
-				{
-					if(headGroup == group[i])
-					{
-						UTF82GBK(words[i].c_str(), str);
-						cout << str;
-					}
-				}
-				cout << endl;
-			}
+			cout << "转换后：" << result << endl;
 		}
 	}
 	fin.close();
@@ -154,6 +177,25 @@ int main(int argc, char* argv[])
 	parser_release_parser(parseEngine);
 
 	return 0;
+}
+
+int FindNextSubSentenceStart(string& line, const int startPos)
+{
+	int pos1 = line.find("；", startPos);
+	int tempPos = line.find("。", startPos);
+	if(-1 != tempPos && (tempPos < pos1 || -1 == pos1)) pos1 = tempPos;
+	tempPos = line.find("：", startPos);
+	if(-1 != tempPos && (tempPos < pos1 || -1 == pos1)) pos1 = tempPos;
+	tempPos = line.find(":", startPos);
+	if(-1 != tempPos && (tempPos < pos1 || -1 == pos1)) pos1 = tempPos;
+	tempPos = line.find(";", startPos);
+	if(-1 != tempPos && (tempPos < pos1 || -1 == pos1)) pos1 = tempPos;
+
+	if(-1 == pos1) return -1;
+	const int width = (line[pos1] == ';' || line[pos1] == ':')?1:2;
+	pos1 += width;
+	if(pos1 >= int(line.length())) return -1;
+	return pos1;
 }
 
 int MergeGroup(vector <int>& group, const int fromId, const int toId, int& headGroup)
