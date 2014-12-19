@@ -16,6 +16,7 @@ int UTF82GBK(const char *szUtf8, char *szGbk);
 int GetGroupId(vector <int>& group, const int wid, int& groupNum);
 int MergeGroup(vector <int>& group, const int fromId, const int toId, int& headGroup);
 int FindNextSubSentenceStart(string& line, const int startPos);
+void RemoveSpaceFromString(string& sentence);
 
 int main(int argc, char* argv[])
 {
@@ -28,6 +29,11 @@ int main(int argc, char* argv[])
 	char segModel[256] = {0};
 	char posModel[256] = {0};
 	char psrModel[256] = {0};
+	char* pLastChrOfPath = argv[1] + (strlen(argv[1]) - 1);
+	if('\\' == *pLastChrOfPath || '/' == *pLastChrOfPath)
+	{
+		*pLastChrOfPath = 0;
+	}
 	sprintf_s(segModel, "%s\\cws.model", argv[1]);
 	sprintf_s(posModel, "%s\\pos.model", argv[1]);
 	sprintf_s(psrModel, "%s\\parser.model", argv[1]);
@@ -72,10 +78,17 @@ int main(int argc, char* argv[])
 		return -5;
 	}
 
+	fout.open(argv[3], ios::out);
+
 	while(getline(fin, line))
 	{
 		if(line.length() > 0)
 		{
+			if('#' == line[0])
+			{
+				continue;
+			}
+
 			int startPos = 0;
 			bool bExit = false;
 			string result = "";
@@ -94,8 +107,37 @@ int main(int argc, char* argv[])
 					startPos = pos;
 				}
 
+				RemoveSpaceFromString(sentence);
+
 				// xxxx的原因:
-				if(-1 != sentence.find("原因") && (-1 != sentence.find("：") || -1 != sentence.find(":"))) continue;
+				if(/*-1 != sentence.find("原因") &&*/ (-1 != sentence.find("：") || -1 != sentence.find(":"))) continue;
+
+				// xxx的原因为/是，只保留为/是之后的部分
+				int excludeOtherSentence = 0; // 0: no, 1: yes and keep this, 2: yes
+				int reasonPos = sentence.find("原因是");
+				if(-1 != reasonPos)
+				{
+					sentence = sentence.substr(reasonPos + 6);
+					excludeOtherSentence = 1;
+				}
+				else
+				{
+					reasonPos = sentence.find("原因为");
+					if(-1 != reasonPos)
+					{
+						sentence = sentence.substr(reasonPos + 6);
+						excludeOtherSentence = 1;
+					}
+					else
+					{
+						reasonPos = sentence.find("原因包括");
+						if(-1 != reasonPos)
+						{
+							sentence = sentence.substr(reasonPos + 8);
+							excludeOtherSentence = 1;
+						}
+					}
+				}
 
 				words.clear();
 				tags.clear();
@@ -121,16 +163,22 @@ int main(int argc, char* argv[])
 					group.push_back(0);
 				}
 
+				int startWord = 0;
+
 				for(int i = 0; i < len; ++i)
 				{
+					UTF82GBK(words[i].c_str(), str);
+					const string word = str;
 					if("HED" == deprels[i])
 					{
 						headGroup = GetGroupId(group, i, groupNum);
 					}
 					else if(deprels[i] == "VOB" || deprels[i] == "WP" || deprels[i] == "COO" || deprels[i] == "SBV" ||
-						deprels[i] == "LAD" || deprels[i] == "RAD" || deprels[i] == "FOB" || deprels[i] == "POB" ||
-						(deprels[i] == "ATT" && (tags[i] == "v" || tags[i] == "m" || tags[i] == "n")) ||
-						(deprels[i] == "ADV" && (tags[i] == "c" || tags[i] == "m" || tags[i] == "a" || tags[i] == "p")))
+						deprels[i] == "LAD" || deprels[i] == "RAD" || deprels[i] == "FOB" || deprels[i] == "POB" || deprels[i] == "CMP" ||
+						(deprels[i] == "ATT" && (tags[i] == "v" || tags[i] == "m" || tags[i] == "n" || tags[i] == "p" || tags[i] == "q")) ||
+						(deprels[i] == "ADV" && (tags[i] == "c" || tags[i] == "m" || tags[i] == "a" || tags[i] == "p" || tags[i] == "q")) ||
+						(tags[i] == "d" && (-1 != word.find("不") || -1 != word.find("无") || -1 != word.find("非")))
+						)
 					{
 						if(group[i] > 0)
 						{
@@ -153,8 +201,13 @@ int main(int argc, char* argv[])
 					}
 				}
 
-				if(headGroup > 0)
+				if(headGroup > 0 && 2 != excludeOtherSentence)
 				{
+					if(1 == excludeOtherSentence)
+					{
+						result = "";
+					}
+
 					for(int i = 0; i < len; ++i)
 					{
 						if(headGroup == group[i])
@@ -167,16 +220,30 @@ int main(int argc, char* argv[])
 			}
 
 			cout << "转换前：" << line << endl;
+			cout << endl;
 			cout << "转换后：" << result << endl;
+			cout << endl << endl;
+
+			fout << result << endl;
 		}
 	}
 	fin.close();
+	fout.close();
 
 	segmentor_release_segmentor(segEngine);
 	postagger_release_postagger(posEngine);
 	parser_release_parser(parseEngine);
 
 	return 0;
+}
+
+void RemoveSpaceFromString(string& sentence)
+{
+	int pos = -1;
+	while(-1 != (pos = sentence.find(' ')))
+	{
+		sentence = sentence.substr(0, pos) + sentence.substr(pos + 1);
+	}
 }
 
 int FindNextSubSentenceStart(string& line, const int startPos)
