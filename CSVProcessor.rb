@@ -14,6 +14,16 @@ class IndividualCompany
   attr_reader :reason
   
   def initialize(content)
+    @net_profit = ""
+    @percentage_from = ""
+    @percentage_to = ""
+    @change_from = ""
+    @change_to = ""
+    @net_profit_last_year = ""
+    @this_year = ""
+    @last_year = ""
+    @reason = ""
+    
     content.each do |line|
       match_data = /([\d]{4})[\s]*年度.*变动区间[^\d]*[,|\"]([\d\.,\-]+)[^\d]*([\d\.,\-]+)/.match(line)
       if match_data
@@ -109,17 +119,17 @@ content = ["\"2014 年度归属于上市公司股东的净利润变动幅度\",-
            "业绩变动的原因说明,\"（1）营业收入比上年同期将有一定的增加；（2）资产减值损失较上年同期有较大幅度的增加；（3）取得的政府补助较上年同期有一定幅度的下降。\""
            ]
 
-company = IndividualCompany.new(content)
-puts company.this_year
-puts company.net_profit
-puts company.last_year
-puts company.net_profit_last_year
-puts company.percentage_from
-puts company.percentage_to
-puts company.change_from
-puts company.change_to
-puts company.reason
+#company = IndividualCompany.new(content)
+#puts company.this_year
+#puts company.net_profit
+#puts company.last_year
+#puts company.net_profit_last_year
+#puts company.percentage_from
+#puts company.percentage_to
+#puts company.change_from
+#puts company.change_to
+#puts company.reason
 
-content_parser = ContentParser.new()
-content_parser.add_report("TR", content)
-content_parser.create_excel_report()
+#content_parser = ContentParser.new()
+#content_parser.add_report("TR", content)
+#content_parser.create_excel_report()
